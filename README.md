@@ -1,2 +1,2 @@
-# Deep-Cure-Learning-
+# Deep-Cure-Learning
 INF581 Reinforcement Learning Project
