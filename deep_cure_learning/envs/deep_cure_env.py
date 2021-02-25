@@ -1,6 +1,15 @@
 import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
+import numpy as np
+import math
+
+def infection_curve(rate, population, number_of_infected):
+    """
+    Computes the new number of infected given current rate, total population and
+    current number of infected
+    """
+    return population/(1+(population/number_of_infected-1)/np.exp(rate))
 
 class ForeignCountry:
     """
@@ -25,7 +34,7 @@ class ForeignCountry:
         Simulate a time step. Computes the new number of infected in this foreign country
         infection_rate: the R-factor of the virus in this country
         """
-        self.number_of_infected = min(self.population, infection_rate * self.number_of_infected)
+        self.number_of_infected = infection_curve(infection_rate, self.population, self.number_of_infected)
         if self.save_history:
             self.hist_infected.append(self.number_of_infected)
 
@@ -92,13 +101,13 @@ class DeepCure(gym.Env):
             fcountry.step(self.v_base_infect_rate)
 
         # compute real R factor taking measures into account
-        self.intern_infect_rate = self.v_base_infect_rate - sum([m.infection_rate_impact for i,m in enumerate(self.available_measures) if self.measures_active[i]])
+        self.intern_infect_rate = max(0,self.v_base_infect_rate - sum([m.infection_rate_impact for i,m in enumerate(self.available_measures) if self.measures_active[i]]))
 
         # compute infections caused by border traffic
         infected_from_foreign_countries = sum([c.border_traffic * c.number_of_infected for i,c in enumerate(self.f_countries) if self.borders_open[i]])
 
         # compute system state for new time step
-        self.number_of_infected = min(self.population, self.intern_infect_rate * self.number_of_infected + infected_from_foreign_countries)
+        self.number_of_infected = min(self.population, infection_curve(self.intern_infect_rate, self.population, self.number_of_infected)+ infected_from_foreign_countries)
         self.number_of_dead = self.v_lethality * max(0, self.number_of_severe - self.hospital_capacity)
         self.number_of_severe = self.v_severity * self.number_of_infected
 
@@ -157,7 +166,7 @@ class DeepCure(gym.Env):
         # If borders_open[i] is true, then border traffic from foreign country i is allowed
         self.borders_open = [True] * len(self.f_countries)
         # A list of available measures
-        self.available_measures = [Measure('Masks', 0.1, 0.1), Measure('Curfew', 0.5, 0.5)]
+        self.available_measures = [Measure('Masks', 0.1, 0.1), Measure('Curfew', 1, 0.5)]
         # If measures_active[i] is true, then measure available_measures[i] is active
         self.measures_active = [False] * len(self.available_measures)
 
@@ -188,6 +197,6 @@ class DeepCure(gym.Env):
     def is_episode_over(self):
         """
         The episode is over if
-        - the whole population dies
+        - the whole population has been infected
         """
-        return self.number_of_dead >= self.population
+        return self.number_of_infected >= self.population
