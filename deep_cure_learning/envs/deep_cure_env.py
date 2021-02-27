@@ -23,20 +23,28 @@ class ForeignCountry:
         save_history: If true, a history (for plotting) is saved
         """
         self.border_traffic = border_traffic
-        self.number_of_infected = number_of_infected
+        self.initial_number_of_infected = number_of_infected
         self.population = population
         self.save_history = save_history
-        if self.save_history:
-            self.hist_infected = []
+        self.reset()
+
 
     def step(self, infection_rate):
         """
         Simulate a time step. Computes the new number of infected in this foreign country
         infection_rate: the R-factor of the virus in this country
         """
-        self.number_of_infected = infection_curve(infection_rate, self.population, self.number_of_infected)
+        old = self.number_of_infected
+        self.number_of_infected += self.new_number_of_infected * infection_rate * ((self.population-self.number_of_infected)/self.population)
+        self.new_number_of_infected = self.number_of_infected - old
         if self.save_history:
             self.hist_infected.append(self.number_of_infected)
+
+    def reset(self):
+        self.number_of_infected = self.initial_number_of_infected
+        self.new_number_of_infected = number_of_infected
+        if self.save_history:
+            self.hist_infected = []
 
 class Measure:
     """
@@ -54,8 +62,11 @@ class Measure:
         self.score_impact = score_impact
 
 class Observation:
-    def __init__(self, env, new_infected, stepsize):
-        self.state = min(int(new_infected / stepsize), env.state_space_size() - 1) # state 5 = 100 < n_infected < 120
+    def __init__(self, old_new_number_of_infected, new_number_of_infected):
+        self.state0 = old_new_number_of_infected
+        self.state1 = new_number_of_infected
+        # self.state = min(int(new_infected / stepsize), env.state_space_size() - 1) # state 5 = 100 < n_infected < 120
+        # self.state_prev = min(int(old_infected / stepsize), env.state_space_size() - 1)
 
 def random_base_infect_rate():
     return 1 + 2 * np.random.rand()
@@ -63,10 +74,9 @@ def random_base_infect_rate():
 class DeepCure(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, foreign_countries, stepsize, v_base_infect_rate = random_base_infect_rate(), save_history=False):
+    def __init__(self, foreign_countries, v_base_infect_rate = random_base_infect_rate(), save_history=False):
         self.save_history = save_history
-        self.stepsize = stepsize
-        self.init_foreign_countries = foreign_countries
+        self.f_countries = foreign_countries
         self.reset(v_base_infect_rate)
 
     def state_space_size(self):
@@ -106,6 +116,7 @@ class DeepCure(gym.Env):
         old_infected = self.number_of_infected
         old_severe = self.number_of_severe
         old_dead = self.number_of_dead
+        old_new_number_of_infected = self.new_number_of_infected
 
         self.take_action(action)
         # simulate environment
@@ -119,7 +130,8 @@ class DeepCure(gym.Env):
         infected_from_foreign_countries = sum([c.border_traffic * c.number_of_infected for i,c in enumerate(self.f_countries) if self.borders_open[i]])
 
         # compute system state for new time step
-        self.number_of_infected += self.new_number_of_infected * self.intern_infect_rate * ((self.population-self.number_of_infected)/self.population)
+        potential_infected_ratio = ((self.population-self.number_of_infected)/self.population) * (self.curfew_impact if self.is_curfew_active else 1)
+        self.number_of_infected += self.new_number_of_infected * self.intern_infect_rate * potential_infected_ratio
         # self.number_of_infected = min(self.number_of_infected, self.population)
 
         # min(self.population, infection_curve(self.intern_infect_rate, self.population, self.number_of_infected)+ infected_from_foreign_countries)
@@ -146,8 +158,8 @@ class DeepCure(gym.Env):
 
         self.t += 1
 
-        ob = Observation(self, self.new_number_of_infected, self.stepsize)
-        return ob.state, self.reward, self.is_episode_over(), {}
+        # ob = Observation(old_new_number_of_infected, self.new_number_of_infected)
+        return np.array([old_new_number_of_infected, self.new_number_of_infected]), self.reward, self.is_episode_over(), {}
 
     def reset(self, v_base_infect_rate = random_base_infect_rate()):
         # the total number of citizens
@@ -168,7 +180,9 @@ class DeepCure(gym.Env):
 
         # Environment:
         # List of foreign countries
-        self.f_countries = self.init_foreign_countries
+        for fcountry in self.f_countries:
+            fcountry.reset()
+        # self.f_countries = self.init_foreign_countries
 
         # the virus's base R-factor
         self.v_base_infect_rate = v_base_infect_rate
@@ -194,7 +208,10 @@ class DeepCure(gym.Env):
         # If borders_open[i] is true, then border traffic from foreign country i is allowed
         self.borders_open = [True] * len(self.f_countries)
         # A list of available measures
-        self.available_measures = [Measure('Masks', infection_rate_impact = 0.25, score_impact = 0.001 * self.population), Measure('Curfew', 1, 0.015 * self.population)]
+        self.available_measures = [Measure('Masks', infection_rate_impact = 0.25, score_impact = 0.001 * self.population)] #, Measure('Curfew', 1, )]
+        self.curfew_impact = 0.5
+        self.is_curfew_active = False
+        self.curfew_reward = 0.015 * self.population
         # If measures_active[i] is true, then measure available_measures[i] is active
         self.measures_active = [False] * len(self.available_measures)
 
@@ -210,7 +227,8 @@ class DeepCure(gym.Env):
             self.hist_new_dead = []
             self.hist_action = []
 
-        return Observation(self, self.new_number_of_infected, self.stepsize).state
+        # return Observation(0, self.new_number_of_infected)
+        return np.array([0, self.new_number_of_infected])
 
     def render(self, mode='human', close=False):
         pass
@@ -219,18 +237,20 @@ class DeepCure(gym.Env):
         """
         action: [ masks, curfew, borders]
         """
-        if action == 0:
-            self.measures_active[0] = False
-            self.measures_active[1] = False
-        elif action == 1:
-            self.measures_active[0] = True
-            self.measures_active[1] = False
-        elif action == 2:
-            self.measures_active[0] = False
-            self.measures_active[1] = True
-        elif action == 3:
-            self.measures_active[0] = True
-            self.measures_active[1] = True
+        self.measures_active[0] = False #action[0]
+        self.is_curfew_active = action[0]
+        # if action == 0:
+        #     self.measures_active[0] = False
+        #     self.is_curfew_active = False
+        # elif action == 1:
+        #     self.measures_active[0] = True
+        #     self.is_curfew_active = False
+        # elif action == 2:
+        #     self.measures_active[0] = False
+        #     self.is_curfew_active = True
+        # elif action == 3:
+        #     self.measures_active[0] = True
+        #     self.is_curfew_active = True
         # self.measures_active[0] = action[0]
         # self.measures_active[1] = action[1]
         # assert(len(action[2]) == len(self.f_countries))
@@ -241,6 +261,8 @@ class DeepCure(gym.Env):
         reward = -sum(m.score_impact for i,m in enumerate(self.available_measures) if self.measures_active[i])
         reward -= self.weight_severe * self.new_number_of_severe
         reward -= self.weight_dead * self.new_number_of_dead
+        if self.is_curfew_active:
+            reward -= self.curfew_reward
         # reward -= self.weight_infected * (self.new_number_of_infected - self.new_number_of_severe)
         return reward
 

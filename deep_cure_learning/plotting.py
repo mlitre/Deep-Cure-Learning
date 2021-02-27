@@ -30,7 +30,18 @@ def plot(env):
     ax3.legend()
 
     ax4 = fig.add_subplot(5,1,5)
-    ax4.plot(range(n), env.hist_action, label='actions')
+    actions = list()
+    for is_curfew in env.hist_action:
+        is_mask = False
+        if not is_mask and not is_curfew:
+            actions.append(0)
+        elif is_mask and not is_curfew:
+            actions.append(1)
+        elif not is_mask and is_curfew:
+            actions.append(2)
+        else:
+            actions.append(3)
+    ax4.plot(range(n), actions, label='actions')
     # ax4.yticks([0,1,2,3], ['no action', 'masks', 'curfew', 'all'])
     ax4.legend()
 

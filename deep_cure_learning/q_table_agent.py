@@ -26,7 +26,7 @@ def epsilon_greedy_policy(state, q_array, epsilon):
 
     return action
 
-def q_learning(environment, alpha=0.1, alpha_factor=0.9995, gamma=0.99, epsilon=0.5, num_episodes=10000, display=False):
+def q_learning(environment, alpha=0.1, alpha_factor=0.9995, gamma=0.99, epsilon=0.5, num_episodes=10000, rate = None, display=False):
     q_array_history = []
     alpha_history = []
     num_states = environment.state_space_size()
@@ -48,7 +48,7 @@ def q_learning(environment, alpha=0.1, alpha_factor=0.9995, gamma=0.99, epsilon=
         ### BEGIN SOLUTION ###
 
         is_final_state = False
-        state = environment.reset()
+        state = environment.reset(rate)
 
         while not is_final_state:
             action = epsilon_greedy_policy(state, q_array, epsilon)
@@ -69,9 +69,9 @@ def q_learning(environment, alpha=0.1, alpha_factor=0.9995, gamma=0.99, epsilon=
 
     return q_array, q_array_history, alpha_history
 
-q_table, _, _ = q_learning(env)
+q_table, _, _ = q_learning(env, rate = 1)
 
-rate = random_base_infect_rate()
+rate = 1.5 #random_base_infect_rate()
 
 def constant_action(action):
     state = env.reset(rate)
@@ -95,9 +95,12 @@ end = False
 t = 0
 while not end :
     action = greedy_policy(state, q_table)
+    # if t > 4:
+    #     action = 2
     state, reward, end, _ = env.step(action)
     t += 1
 
+print('')
 print(f'Total number of dead: {env.number_of_dead}')
 print(f'Total number of severe: {env.number_of_severe}')
 print(f'Total reward = {sum(env.hist_reward)}')
