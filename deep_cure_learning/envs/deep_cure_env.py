@@ -54,15 +54,23 @@ class Measure:
         self.score_impact = score_impact
 
 class Observation:
-    def __init__(self):
-        pass
+    def __init__(self, env, new_infected, stepsize):
+        self.state = min(int(new_infected / stepsize), env.state_space_size() - 1) # state 5 = 100 < n_infected < 120
+
+def random_base_infect_rate():
+    return 1 + 2 * np.random.rand()
 
 class DeepCure(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, save_history=False):
+    def __init__(self, foreign_countries, stepsize, v_base_infect_rate = random_base_infect_rate(), save_history=False):
         self.save_history = save_history
-        self.reset()
+        self.stepsize = stepsize
+        self.init_foreign_countries = foreign_countries
+        self.reset(v_base_infect_rate)
+
+    def state_space_size(self):
+        return int(self.population / self.stepsize)
 
     def step(self, action):
         """
@@ -95,6 +103,10 @@ class DeepCure(gym.Env):
                  use this for learning.
         """
         # apply action
+        old_infected = self.number_of_infected
+        old_severe = self.number_of_severe
+        old_dead = self.number_of_dead
+
         self.take_action(action)
         # simulate environment
         for fcountry in self.f_countries:
@@ -107,9 +119,16 @@ class DeepCure(gym.Env):
         infected_from_foreign_countries = sum([c.border_traffic * c.number_of_infected for i,c in enumerate(self.f_countries) if self.borders_open[i]])
 
         # compute system state for new time step
-        self.number_of_infected = min(self.population, infection_curve(self.intern_infect_rate, self.population, self.number_of_infected)+ infected_from_foreign_countries)
-        self.number_of_dead = self.v_lethality * max(0, self.number_of_severe - self.hospital_capacity)
+        self.number_of_infected += self.new_number_of_infected * self.intern_infect_rate * ((self.population-self.number_of_infected)/self.population)
+        # self.number_of_infected = min(self.number_of_infected, self.population)
+
+        # min(self.population, infection_curve(self.intern_infect_rate, self.population, self.number_of_infected)+ infected_from_foreign_countries)
+        self.number_of_dead += self.v_lethality * max(0, self.new_number_of_severe - self.hospital_capacity)
         self.number_of_severe = self.v_severity * self.number_of_infected
+
+        self.new_number_of_infected = self.number_of_infected - old_infected
+        self.new_number_of_severe = self.number_of_severe - old_severe
+        self.new_number_of_dead = self.number_of_dead - old_dead
 
         self.reward = self.get_reward()
 
@@ -120,35 +139,42 @@ class DeepCure(gym.Env):
             self.hist_dead.append(self.number_of_dead)
             self.hist_reward.append(self.reward)
             self.hist_border.append(infected_from_foreign_countries)
+            self.hist_new_infected.append(self.new_number_of_infected)
+            self.hist_new_severe.append(self.new_number_of_severe)
+            self.hist_new_dead.append(self.new_number_of_dead)
+            self.hist_action.append(action)
 
         self.t += 1
 
-        ob = Observation()
-        return ob, self.reward, self.is_episode_over(), {}
+        ob = Observation(self, self.new_number_of_infected, self.stepsize)
+        return ob.state, self.reward, self.is_episode_over(), {}
 
-    def reset(self):
+    def reset(self, v_base_infect_rate = random_base_infect_rate()):
         # the total number of citizens
-        self.population = 1000
+        self.population = 100_000
         # the number of infected citizens at the current time step
         self.number_of_infected = 1
+        self.new_number_of_infected = self.number_of_infected
         # the number of dead citizens at the current time step
         self.number_of_dead = 0
+        self.new_number_of_dead = 0
         # the number of severe cases of the illness
         self.number_of_severe = 0
+        self.new_number_of_severe = 0
         # the capacity of hospitals. Severe cases that aren't treated in the hospital may lead to death
-        self.hospital_capacity = 100
+        self.hospital_capacity = 0.01 * self.population
         # the true R-factor in the agent's country
         self.intern_infect_rate = 0
 
         # Environment:
         # List of foreign countries
-        self.f_countries = [ForeignCountry(0.01,10,1000, self.save_history)]
+        self.f_countries = self.init_foreign_countries
 
         # the virus's base R-factor
-        self.v_base_infect_rate = 1.5
+        self.v_base_infect_rate = v_base_infect_rate
         # the percentage of severe cases in case of infection
         # E.g. if v_severity=0.5, then 50% of all infections are severe cases
-        self.v_severity = 0.5
+        self.v_severity = 0.2
         # the percentage of lethal outcome in case of severe case without hospitalization
         # E.g. if v_severity=0.5, then 50% of non-hospitalized severe cases lead to death
         self.v_lethality = 0.5
@@ -158,15 +184,17 @@ class DeepCure(gym.Env):
         # the current score
         self.reward = 0
         # score weighting for the number of dead citizens
-        self.weight_dead = 1
+        self.weight_dead = 4
         # score weighting for the number of severe cases
-        self.weight_severe = 0.5
+        self.weight_severe = 2
+
+        self.weight_infected = 0.1
 
         # Measures:
         # If borders_open[i] is true, then border traffic from foreign country i is allowed
         self.borders_open = [True] * len(self.f_countries)
         # A list of available measures
-        self.available_measures = [Measure('Masks', 0.1, 0.1), Measure('Curfew', 1, 0.5)]
+        self.available_measures = [Measure('Masks', infection_rate_impact = 0.25, score_impact = 0.001 * self.population), Measure('Curfew', 1, 0.015 * self.population)]
         # If measures_active[i] is true, then measure available_measures[i] is active
         self.measures_active = [False] * len(self.available_measures)
 
@@ -177,6 +205,12 @@ class DeepCure(gym.Env):
             self.hist_dead = []
             self.hist_reward = []
             self.hist_border = []
+            self.hist_new_infected = []
+            self.hist_new_severe = []
+            self.hist_new_dead = []
+            self.hist_action = []
+
+        return Observation(self, self.new_number_of_infected, self.stepsize).state
 
     def render(self, mode='human', close=False):
         pass
@@ -185,18 +219,33 @@ class DeepCure(gym.Env):
         """
         action: [ masks, curfew, borders]
         """
-        self.measures_active[0] = action[0]
-        self.measures_active[1] = action[1]
-        assert(len(action[2]) == len(self.f_countries))
-        self.borders_open = action[2]
+        if action == 0:
+            self.measures_active[0] = False
+            self.measures_active[1] = False
+        elif action == 1:
+            self.measures_active[0] = True
+            self.measures_active[1] = False
+        elif action == 2:
+            self.measures_active[0] = False
+            self.measures_active[1] = True
+        elif action == 3:
+            self.measures_active[0] = True
+            self.measures_active[1] = True
+        # self.measures_active[0] = action[0]
+        # self.measures_active[1] = action[1]
+        # assert(len(action[2]) == len(self.f_countries))
+        self.borders_open = []
 
     def get_reward(self):
         """ Penality for active measures, number of severe cases and number of dead """
-        return -sum(m.score_impact for i,m in enumerate(self.available_measures) if self.measures_active[i]) - self.weight_severe * self.number_of_severe - self.weight_dead * self.number_of_dead
+        reward = -sum(m.score_impact for i,m in enumerate(self.available_measures) if self.measures_active[i])
+        reward -= self.weight_severe * self.new_number_of_severe
+        reward -= self.weight_dead * self.new_number_of_dead
+        # reward -= self.weight_infected * (self.new_number_of_infected - self.new_number_of_severe)
+        return reward
 
     def is_episode_over(self):
         """
-        The episode is over if
-        - the whole population has been infected
+        The episode is over after 15 timesteps
         """
-        return self.number_of_infected >= self.population
+        return self.t >= 30
