@@ -77,28 +77,32 @@ def random_lifetime():
 class DeepCure(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, foreign_countries, v_base_infect_rate = None, v_lifetime = None, save_history=False):
+    def __init__(self, foreign_countries, v_base_infect_rate = None, v_lifetime = None, save_history=False, seed = None):
         self.save_history = save_history
         self.f_countries = foreign_countries
+        # the total number of citizens
+        self.population = 100_000
+        # the capacity of hospitals. Severe cases that aren't treated in the hospital may lead to death
+        self.hospital_capacity = 0.005 * self.population
+        self.action_space = spaces.MultiBinary(3)
+        self.observation_space = spaces.Box(low=0, high=self.population, shape=(3,), dtype=np.float32)
+        if seed is not None:
+            self.action_space.seed(seed)
+            self.observation_space.seed(seed)
         self.reset(v_base_infect_rate, v_lifetime)
-
-    def state_space_size(self):
-        return int(self.population / self.stepsize)
 
     def step(self, action):
         """
-
         Parameters
         ----------
-        action : [mask: boolean, curfew: boolean, border_open: list of boolean]
+        action : [mask: boolean, curfew: boolean, border_open: boolean]
         Indicate the action to take
 
         Returns
         -------
         ob, reward, episode_over, info : tuple
             ob (object) :
-                an environment-specific object representing your observation of
-                the environment.
+                [new number of severe cases, new number of dead, new number of infected from foreign countries]
             reward (float) :
                 amount of reward achieved by the previous action. The scale
                 varies between environments, but the goal is always to increase
@@ -164,8 +168,6 @@ class DeepCure(gym.Env):
         return np.array([self.new_number_of_severe, self.new_number_of_dead, infected_from_foreign_countries]), self.reward, self.is_episode_over(), {}
 
     def reset(self, rate = None, lifetime = None):
-        # the total number of citizens
-        self.population = 100_000
         # the number of infected citizens at the current time step
         self.number_of_infected = 100
         self.new_number_of_infected = self.number_of_infected
@@ -175,8 +177,6 @@ class DeepCure(gym.Env):
         # the number of severe cases of the illness
         self.number_of_severe = 0
         self.new_number_of_severe = 0
-        # the capacity of hospitals. Severe cases that aren't treated in the hospital may lead to death
-        self.hospital_capacity = 0.005 * self.population
         # the true R-factor in the agent's country
         self.intern_infect_rate = 0
 
@@ -237,7 +237,6 @@ class DeepCure(gym.Env):
             self.hist_new_dead = []
             self.hist_action = []
 
-        # return Observation(0, self.new_number_of_infected)
         return np.array([0, 0, 0])
 
     def render(self, mode='human', close=False):
@@ -247,25 +246,10 @@ class DeepCure(gym.Env):
         """
         action: [ masks, curfew, borders]
         """
-        # print(f'Action taken = {action}')
-        self.measures_active[0] = action[0] #action[0]
-        self.is_curfew_active = action[1]
-        self.borders_open[0] = action[2]
-        # if action == 0:
-        #     self.measures_active[0] = False
-        #     self.is_curfew_active = False
-        # elif action == 1:
-        #     self.measures_active[0] = True
-        #     self.is_curfew_active = False
-        # elif action == 2:
-        #     self.measures_active[0] = False
-        #     self.is_curfew_active = True
-        # elif action == 3:
-        #     self.measures_active[0] = True
-        #     self.is_curfew_active = True
-        # self.measures_active[0] = action[0]
-        # self.measures_active[1] = action[1]
-        # assert(len(action[2]) == len(self.f_countries))
+        assert self.action_space.contains(action), f'Invalid action {action}'
+        self.measures_active[0] = action[0] > 0
+        self.is_curfew_active = action[1] > 0
+        self.borders_open[0] = action[2] > 0
 
     def get_reward(self):
         """ Penality for active measures, number of severe cases and number of dead """
@@ -274,11 +258,10 @@ class DeepCure(gym.Env):
         reward -= self.weight_dead * self.new_number_of_dead
         if self.is_curfew_active:
             reward -= self.curfew_reward
-        # reward -= self.weight_infected * (self.new_number_of_infected - self.new_number_of_severe)
         return reward / self.population / self.v_lifetime
 
     def is_episode_over(self):
         """
-        The episode is over after 15 timesteps
+        The episode is over after v_lifetime timesteps
         """
         return self.t >= self.v_lifetime

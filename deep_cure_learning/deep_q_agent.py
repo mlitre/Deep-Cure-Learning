@@ -111,79 +111,41 @@ def train(env, theta_init, alpha_init = 0.001, iterations = 2000, rate = None, l
         PG = compute_policy_gradient(episode_states, episode_actions, episode_rewards, theta, played_rate)
         old_theta = np.copy(theta)
         theta = theta + alpha * PG
-        # print(f'PG = {PG}')
-        # if i < 10:
-        #     print(f'theta = {theta}')
         R = score_on_multiple_episodes(env, theta, rate, lifetime)
         average_returns.append(R)
 
     return theta, average_returns
 
-env = DeepCure(foreign_countries = [ForeignCountry(500,100,100_000, save_history=True)], save_history=True)
-env.reset()
+if __name__ == "__main__":
 
-theta = np.zeros((3,4))#np.random.randn(1,5)
-# sigmoid(b * w2) >= 0.5
+    SEED = 42
 
-theta, average_returns = train(env, theta)
+    np.random.seed(SEED)
 
-# theta = np.array([[-1, 1, 0,0,0]])
-# average_returns = []
-# theta = np.array([[-0.49629676,  3.13567235, 0]])
+    env = DeepCure(foreign_countries = [ForeignCountry(500,100,100_000, save_history=True)], save_history=True, seed=SEED)
+    env.reset()
 
-def constant_action(action,rate, lifetime):
-    state = env.reset(rate, lifetime)
-    end = False
-    t = 0
-    while not end :
-        state, reward, end, _ = env.step(action)
-        t += 1
-    return sum(env.hist_reward)
+    # observation x action +1
+    theta = np.zeros((env.observation_space.shape[0],env.action_space.n + 1))
+    # sigmoid(b * w2) >= 0.5
 
-def compare(env,theta, n = 100):
-    cnts = [0] * 5
-    rewards = [0] * 5
-    reward_hist = list()
-    for i in range(n):
-        rate = random_base_infect_rate()
-        lifetime = random_lifetime()
-        rewards[0] = constant_action([False,False,False], rate, lifetime)
-        rewards[1] = constant_action([True,False,False], rate, lifetime)
-        # if i +1 >= n:
-        #     plot(env, average_returns)
-        rewards[2] = constant_action([False,True,False], rate, lifetime)
-        rewards[3] = constant_action([True,True,False], rate, lifetime)
+    theta, average_returns = train(env, theta)
+    print(theta)
 
-        obs = env.reset(rate)
-        done = False
-        while not done:
-            probs = logistic_regression(obs, theta)
-            actions = probs >= 0.5
-            obs, reward, done, _ = env.step(actions)
-        rewards[4] = sum(env.hist_reward)
+    # theta = np.array([[-1, 1, 0,0,0]])
+    # average_returns = []
+    # theta = np.array([[-0.49629676,  3.13567235, 0]])
 
-        reward_hist.append(list(rewards))
-        cnts[np.argmax(rewards)] += 1
+    # compare(env, theta)
 
-    reward_hist = np.array(reward_hist)
-    print(f'Action Nothing : {cnts[0]}')
-    print(f'Action Masks : {cnts[1]}')
-    print(f'Action Curfew : {cnts[2]}')
-    print(f'Action All : {cnts[3]}')
-    print(f'Action agent: {cnts[4]}')
-    print()
-    print(f'Action nothing\t\t{np.mean(reward_hist[:,0])} ({np.std(reward_hist[:,0])})')
-    print(f'Action masks\t\t{np.mean(reward_hist[:,1])} ({np.std(reward_hist[:,1])})')
-    print(f'Action curfew\t\t{np.mean(reward_hist[:,2])} ({np.std(reward_hist[:,2])})')
-    print(f'Action all\t\t{np.mean(reward_hist[:,3])} ({np.std(reward_hist[:,3])})')
-    print(f'Action agent\t\t{np.mean(reward_hist[:,4])} ({np.std(reward_hist[:,4])})')
-
-compare(env, theta)
-
-# import matplotlib.pyplot as plt
-# plt.figure()
-# plt.plot(range(len(average_returns)), average_returns)
-# plt.show()
+    import matplotlib.pyplot as plt
+    fig = plt.figure()
+    ax = fig.add_subplot(1,1,1)
+    ax.set_xlabel('iterations')
+    ax.set_ylabel('average reward')
+    ax.plot(range(len(average_returns)), average_returns)
+    fig.tight_layout()
+    plt.show()
 
 # constant_action([False, False],rate)
 # constant_action([False,True], rate)
@@ -208,5 +170,5 @@ compare(env, theta)
 # print(f'Total number of severe: {env.number_of_severe}')
 # print(f'Total reward = {sum(env.hist_reward)}')
 # # print(f'Reward baseline = {sum(play_baseline(env,rate))}')
-
-plot(env, average_returns)
+# 
+# plot(env, average_returns)

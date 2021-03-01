@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-def plot(env, average_returns):
+def plot(env, average_returns = None):
     fig = plt.figure()
 
     n = len(env.hist_infected)
@@ -47,7 +47,8 @@ def plot(env, average_returns):
     # ax4.yticks([0,1,2,3], ['no action', 'masks', 'curfew', 'all'])
     ax4.legend()
 
-    ax5 = fig.add_subplot(6,1,6)
-    ax5.plot(range(len(average_returns)), average_returns)
+    if average_returns is not None:
+        ax5 = fig.add_subplot(6,1,6)
+        ax5.plot(range(len(average_returns)), average_returns)
 
     plt.show()
