@@ -79,13 +79,13 @@ if __name__ == "__main__":
 
     np.random.seed(SEED)
 
-    env = DeepCure(foreign_countries = [ForeignCountry(500,100,100_000, save_history=True)], save_history=True, seed = SEED)
+    env = DeepCure(foreign_countries = [ForeignCountry(0.1,100,100_000, save_history=True)], save_history=True, seed = SEED)
 
-    stepsize = 1000
-    max_steps = 100
+    stepsize = 100
+    max_steps = 10
 
-# q_table, q_array_history, alpha_history = q_learning(env, epsilon=0.5, stepsize = stepsize, max_steps = max_steps)
-# np.save(f'qtable-{stepsize}-{max_steps}.npy', q_table)
+    q_table, q_array_history, alpha_history = q_learning(env, epsilon=0.5, stepsize = stepsize, max_steps = max_steps)
+    np.save(f'qtable-{stepsize}-{max_steps}.npy', q_table)
 #
 # fig = plt.figure()
 # ax0 = fig.add_subplot(2,1,1)
