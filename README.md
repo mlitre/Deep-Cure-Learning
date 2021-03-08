@@ -8,7 +8,7 @@ The repository's important files are located as follows:
 ```bash
 ├── deep_cure_learning
 │   ├── envs
-│   │   ├── deep_cure_env.py
+│   │   └── deep_cure_env.py
 │   ├── comparison.py
 │   ├── deep_q_agent.py (theta.npy)
 │   ├── no_action_agent.py 
