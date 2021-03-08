@@ -1,10 +1,8 @@
 import matplotlib.pyplot as plt
 
-def plot(env, average_returns = None, show_borders=True):
+def plot(env, show_borders=True):
     fig = plt.figure()
     total = 4
-    if average_returns is not None:
-        total = 6
 
     n = len(env.hist_infected)
     ax0 = fig.add_subplot(total,1,1)
@@ -16,8 +14,8 @@ def plot(env, average_returns = None, show_borders=True):
     ax0.plot(range(n), env.hist_dead, label='dead')
     ax0.set_xlim(left=0,right=n)
     ax0.set_ylim(bottom=0)
-    # for i,fc in enumerate(env.f_countries):
-    #     ax0.plot(range(n), fc.hist_infected, label=f'Infected foreign {i}')
+    for i,fc in enumerate(env.f_countries):
+        ax0.plot(range(n), fc.hist_infected, label=f'Infected foreign')
     ax0.legend()
 
     ax1 = fig.add_subplot(total,1,2)
@@ -44,12 +42,13 @@ def plot(env, average_returns = None, show_borders=True):
     ax3.set_title('Actions')
     ax3.set_xlabel('time')
     ax3.set_ylabel('action')
-    ax3.set_yticks([0,1,2,3])
-    ax3.set_yticklabels(['no action', 'masks', 'curfew', 'mask & curfew'])
+    ax3.set_yticks([0,0.5,1,2,3])
+    ax3.set_yticklabels(['no action', 'border closed', 'masks', 'curfew', 'mask & curfew'])
+    ax3.yaxis.get_ticklabels()[1].set_color('tab:orange')
     actions = list()
     border = list()
     for is_mask,is_curfew,is_border_open in env.hist_action:
-        border.append(is_border_open)
+        border.append(0.5 if not is_border_open else 0)
         if not is_mask and not is_curfew:
             actions.append(0)
         elif is_mask and not is_curfew:
@@ -61,11 +60,8 @@ def plot(env, average_returns = None, show_borders=True):
     ax3.plot(range(n), actions, label='actions')
     ax3.plot(range(n), border, label='border')
     ax3.set_xlim(left=0,right=n)
+    ax3.set_ylim(bottom=0,top=3)
     ax3.legend()
-
-    if average_returns is not None:
-        ax5 = fig.add_subplot(5,1,5)
-        ax5.plot(range(len(average_returns)), average_returns)
 
     fig.tight_layout()
     plt.show()

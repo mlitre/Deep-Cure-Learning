@@ -8,9 +8,6 @@ import numpy as np
 
 def action_ratio(env):
     actions = np.array(env.hist_action)
-    # cnt = np.zeros((env.action_space.n,))
-    # for actions in env.hist_action:
-    #     cnt += np.array(actions) > 0
     return np.sum(actions, axis=0)/len(env.hist_action)
 
 def constant_action(action,rate, lifetime, delay):
@@ -20,7 +17,7 @@ def constant_action(action,rate, lifetime, delay):
         state, reward, end, _ = env.step(action)
     return sum(env.hist_reward), action_ratio(env)
 
-def deep_q(env, theta, rate, lifetime,delay):
+def deep_q(env, theta, rate, lifetime, delay):
     obs = env.reset(rate,lifetime,delay)
     done = False
     while not done:
@@ -29,7 +26,7 @@ def deep_q(env, theta, rate, lifetime,delay):
         obs, reward, done, _ = env.step(actions)
     return sum(env.hist_reward), action_ratio(env)
 
-def q_table(env, table, stepsize, num_states, rate, lifetime,delay):
+def q_table(env, table, stepsize, num_states, rate, lifetime, delay):
     state = discretize(env.reset(rate,lifetime,delay), stepsize, num_states)
     end = False
     t = 0
@@ -69,6 +66,7 @@ def tweak_params(env, n=100):
         prewards_hist.append(list(prewards))
     rewards = [0] * 8
     rewards_hist = list()
+    # non-pandemic
     for i in range(n):
         rate = random_base_infect_rate()
         while rate > 1.:
@@ -97,8 +95,6 @@ def tweak_params(env, n=100):
     print()
     print(f'All borders closed:{pr[3]} {r[3]}')
     print(f'All borders open:{pr[7]} {r[7]}')
-
-    # print(f'No Action:\t\t{pr[0]}\t\t{r[0]}')
 
 
 def compare(env,theta, q_tables, policy, theta_saes, policy2, theta_saes2, n = 250):
@@ -180,8 +176,8 @@ env.reset()
 theta = np.load('theta.npy')
 
 q_tables = [
-    (np.load('qtable-100-10.npy'), 100, np.minimum((env.observation_space.high - env.observation_space.low)/10, 10).astype(int))#,
-    #(np.load('qtable-1000-100.npy'), 1000, np.minimum((env.observation_space.high - env.observation_space.low)/100, 100).astype(int))
+    (np.load('qtable-100.npy'), 100, np.minimum((env.observation_space.high - env.observation_space.low)/10, 10).astype(int)),
+    (np.load('qtable-1000.npy'), 1000, np.minimum((env.observation_space.high - env.observation_space.low)/10, 10).astype(int))
 ]
 
 theta_saes = np.load('saes-theta.npy')
@@ -189,14 +185,24 @@ policy = NeuralNetworkPolicy(env, one_layer=True)
 
 theta_saes2 = np.load('saes-theta2.npy')
 policy2 = NeuralNetworkPolicy(env, h_size=10, one_layer=False)
+
+# runs 250 environments and tests each agent
 # compare(env, theta, q_tables, policy, theta_saes, policy2, theta_saes2)
-# tweak_params(env)
 
-#
-q_table(env, q_tables[0][0], q_tables[0][1], q_tables[0][2], 1.7, 100, [10])
 
-# saes(env, policy, theta_saes, 0.7, 100, [10])
-# deep_q(env, theta, 1.7, 100, [10])
-# constant_action([False,False,True], 2.7, 30, [0])
-print(f'Reward {sum(env.hist_reward)}')
-plot(env)
+
+# runs q_table agent
+# q_table(env, q_tables[1][0], q_tables[1][1], q_tables[1][2], 1.7, 100, [40])
+
+# runs saes agent
+# saes(env, policy, theta_saes, 1.7, 100, [40])
+
+# runs deep_q agent
+# deep_q(env, theta, 1.7, 100, [40])
+
+# runs a baseline agent
+constant_action([True, True, False], 1.7, 100, [40])
+
+# uncomment to plot the latest run
+# print(f'Reward {sum(env.hist_reward)}')
+# plot(env)

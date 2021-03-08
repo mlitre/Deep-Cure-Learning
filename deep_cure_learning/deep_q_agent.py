@@ -37,13 +37,6 @@ def play_one_episode(env, theta, rate = None, lifetime = None):
     while not done:
         a_t = draw_action(s_t, theta)
         s_t, r_t, done, info = env.step(a_t)
-        if r_t > 0:
-            print(env.v_lifetime)
-            print(env.v_base_infect_rate)
-            print(a_t)
-            print(s_t)
-            print(r_t)
-            1/0
 
         episode_states.append(s_t)
         episode_actions.append(a_t)
@@ -91,8 +84,6 @@ def train(env, theta_init, alpha_init = 0.001, iterations = 2000, rate = None, l
         episode_states, episode_actions, episode_rewards, played_rate = play_one_episode(env, theta, rate, lifetime)
         alpha = alpha_init /np.sqrt(1+i)
         PG = compute_policy_gradient(episode_states, episode_actions, episode_rewards, theta, played_rate)
-        # print(f'Theta = {theta}')
-        # print(f'PG = {PG}')
         old_theta = np.copy(theta)
         theta = theta + alpha * PG
         R = score_on_multiple_episodes(env, theta, rate, lifetime)
